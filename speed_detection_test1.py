@@ -1,7 +1,13 @@
+from idlelib.format import Rstrip
+
 import cv2
 import numpy as np
 from collections import OrderedDict
+from ultralytics import YOLO
+from scipy.spatial import distance as dist
+import torch
 import math
+import time
 
 # ---------- Simple Centroid Tracker ----------
 
@@ -78,17 +84,77 @@ class CentroidTracker:
 
 # ---------- Main: detection + speed ----------
 
-video_path = "video.mp4"  # or 0 for webcam
-cap = cv2.VideoCapture(video_path)
+RTSP_URL = "rtsp://admin:eletricasnb2021@10.6.58.207:554/cam/realmonitor?channel=1&subtype=1"
+cap = cv2.VideoCapture(
+    RTSP_URL,
+    cv2.CAP_FFMPEG
+)
+
+cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
 
 fps = cap.get(cv2.CAP_PROP_FPS)
-if fps <= 0:
-    fps = 30.0  # fallback
+prev_time = time.time()
+fps = 0.0
+
+current_time = time.time()
+fps = 1 / (current_time - prev_time)
+prev_time = current_time
+
+# Detection Model (YOLO on PyTorch)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+model = YOLO("yolov8n.pt").to(device)
+
+VEHICLE_CLASSES = [2, 3, 5, 7]  # car, motorcycle, bus, truck
+
+# Tracking (with ByteTrack built-in)
+results = model.track(source=RTSP_URL, persist=True, tracker="bytetrack.yaml", device=device, stream=True)
+
+# Defining a measurement line (more friendly)
+# for 720p frame:
+line1_y = 520 # line 1 position in pixels
+line2_y = 440 # line 2 position in pixels
+
+# Knowing the real distance between two lines in the scene to estimate speed
+distance_meters = 10.0  # real distance in meters between two lines
+
+# Measuring the pixel distance between the two lines in the image
+# (it must be measured manually on a sample frame)
+pixel_distance = abs(line2_y - line1_y)# example value
 
 # meters per pixel (you must calibrate this!)
 # example: 10 meters on road correspond to 200 pixels in image -> 10 / 200
-METERS_PER_PIXEL = 10.0 / 200.0
+meters_per_pixel = distance_meters / pixel_distance
 
+# Robust Speed Estimation Logic
+vehicle_times = {}
+vehicle_positions = {}
+frame_count = 0
+crossed_line_A = False
+crossed_line_B = False
+
+for track in results[0].boxes:
+    track_id = int(track.id)
+    x1, y1, x2, y2 = track.xyxy[0]
+    center_y = int((y1 + y2) / 2)
+
+    if track_id not in vehicle_positions:
+        vehicle_positions[track_id] = []
+
+    vehicle_positions[track_id].append(frame_count, center_y)
+
+    # Detect crossing
+    if crossed_line_A:
+        vehicle_times[track_id]["t1"] = frame_count
+    if crossed_line_B:
+        vehicle_times[track_id]["t2"] = frame_count
+
+# Speed calculation
+time_sec = [(t2 - t1) / fps]
+speed_m_s = distance_meters / time_sec
+speed_kmh = speed_m_s * 3.6
+
+# Robust Speed Estimation Logic (Alternative using Background Subtraction + Centroid Tracking)
 bg_sub = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=50, detectShadows=True)
 
 ct = CentroidTracker(max_disappeared=15)
@@ -144,7 +210,7 @@ while True:
             if df > 0:
                 dpx = math.hypot(cx - last_cx, cy - last_cy)
                 dt = df / fps
-                dm = dpx * METERS_PER_PIXEL
+                dm = dpx * meters_per_pixel
                 v_ms = dm / dt if dt > 0 else 0.0
                 speed_kmh = v_ms * 3.6
 
@@ -162,6 +228,26 @@ while True:
     key = cv2.waitKey(1) & 0xFF
     if key == 27 or key == ord('q'):
         break
+
+# Checking for GPU
+if torch.cuda.is_available and torch.cuda.device_name(0):
+    print("Using GPU:", torch.cuda.device_name(0))
+    print("GPU Details:")
+    print(torch.cuda.get_device_properties(0))
+
+    model = YOLO("yolov8n.pt")
+    model.fuse()
+
+    results = model.track(
+        source = RTSP_URL,
+        stream=True,
+        half=True,
+        device=0,
+        persist=True,
+        tracker="bytetrack.yaml"
+    )
+else:
+    print("Using CPU")
 
 cap.release()
 cv2.destroyAllWindows()
