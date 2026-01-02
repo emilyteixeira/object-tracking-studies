@@ -1,6 +1,5 @@
 # Object Tracking and Speed Detection with OpenCV and Python3
 
-## Perplexity Deep Research
 You can implement object tracking and speed estimation in Python with OpenCV by combining a lightweight tracker (e.g., centroid/tracker or MOSSE/CSRT) with a simple speed calculation using frame-to-frame centroids and a known frame rate or perspective-based calibration.
 
 ### What to cover
@@ -501,7 +500,6 @@ If you share: (1) your camera angle (side, front‑facing, overhead) and (2) whe
 
 ---
 
-## ChatGPT Results
 Estimating vehicle speed in real time with **OpenCV + YOLO** is a classic (and very doable) computer vision pipeline. The key idea is:
 
 > **Detect → Track → Convert pixels to real-world distance → Measure time → Compute speed**

@@ -132,6 +132,8 @@ vehicle_positions = {}
 frame_count = 0
 crossed_line_A = False
 crossed_line_B = False
+t1 = int
+t2 = int
 
 for track in results[0].boxes:
     track_id = int(track.id)
@@ -145,9 +147,9 @@ for track in results[0].boxes:
 
     # Detect crossing
     if crossed_line_A:
-        vehicle_times[track_id]["t1"] = frame_count
+        vehicle_times[track_id][t1] = frame_count
     if crossed_line_B:
-        vehicle_times[track_id]["t2"] = frame_count
+        vehicle_times[track_id][t2] = frame_count
 
 # Speed calculation
 time_sec = [(t2 - t1) / fps]
