@@ -5,6 +5,7 @@ export interface TruckData {
   centroid: [number, number];
   in_roi: boolean;
   alert: boolean;
+  license_plate: string | null;
 }
 
 export interface Stats {
@@ -41,3 +42,15 @@ export interface FrameMessage {
 }
 
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
+
+export interface TruckHistoryRecord {
+  id: number;
+  truck_track_id: number;
+  license_plate: string | null;
+  plate_confidence: number | null;
+  max_speed_kmh: number | null;
+  entry_time: string;
+  exit_time: string | null;
+  frame_path: string | null;
+  camera_id: string;
+}

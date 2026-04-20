@@ -10,6 +10,14 @@ export default defineConfig({
         ws: true,
         rewrite: (path) => path,
       },
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/snapshots": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
     },
   },
 });

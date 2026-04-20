@@ -1,20 +1,23 @@
 import base64
 import math
+import sqlite3
 import time
 from collections import deque
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
 from ultralytics import YOLO
 
 from backend import config
+from backend import database as db
 from backend.centroid_tracker import CentroidTracker
 from backend.models import AlertEvent, ConfigData, FrameMessage, Stats, TruckData
+from backend.passage_tracker import PassageTracker
 
 
 class SpeedDetector:
-    def __init__(self) -> None:
+    def __init__(self, conn: sqlite3.Connection) -> None:
         self.model = YOLO(config.MODEL_PATH)
 
         # Aquece o modelo para evitar latência no primeiro frame real
@@ -41,6 +44,9 @@ class SpeedDetector:
         self._frame_idx: int = 0
         self._fps: float = 30.0
         self._last_time: float = time.time()
+
+        # Histórico de passagens (SQLite + OCR de placas)
+        self.passage_tracker = PassageTracker(conn)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Método principal chamado para cada frame capturado
@@ -75,7 +81,14 @@ class SpeedDetector:
                 rects.append((int(x1), int(y1), int(x2), int(y2)))
                 centroids.append((cx, cy))
 
+        # ── Rastreamento — captura IDs antes do update para detectar desregistros
+        prev_ids = set(self.ct.objects.keys())
         objects = self.ct.update(centroids)
+        deregistered_ids = prev_ids - set(objects.keys())
+
+        # Notifica o PassageTracker sobre IDs que saíram da cena
+        for tid in deregistered_ids:
+            self.passage_tracker.on_deregister(tid)
 
         # ── Cálculo de velocidade e anotação ────────────────────────────────
         annotated = frame.copy()
@@ -88,7 +101,7 @@ class SpeedDetector:
             in_roi = config.ROI_Y_MIN <= cy <= config.ROI_Y_MAX
 
             # Busca bbox mais próxima do centróide
-            best_idx = None
+            best_idx: Optional[int] = None
             best_dist = float("inf")
             for i, c in enumerate(centroids):
                 d = math.hypot(cx - c[0], cy - c[1])
@@ -120,7 +133,7 @@ class SpeedDetector:
 
             is_alert = smooth_speed > self.threshold_kmh and smooth_speed > 0
 
-            # Registra alerta (evita duplicados no mesmo frame)
+            # Registra alerta
             if is_alert:
                 alert = AlertEvent(
                     truck_id=object_id,
@@ -132,6 +145,18 @@ class SpeedDetector:
                 self.alert_log.append(alert)
                 if len(self.alert_log) > config.MAX_ALERT_HISTORY:
                     self.alert_log.pop(0)
+
+            # ── Atualiza PassageTracker ───────────────────────────────────────
+            self.passage_tracker.process(
+                truck_id=object_id,
+                in_roi=in_roi,
+                bbox=bbox,
+                frame=frame,          # frame original (sem anotações) para melhor OCR
+                speed_kmh=smooth_speed,
+            )
+
+            # Placa mais recente conhecida para este caminhão
+            plate = self.passage_tracker.get_best_plate(object_id)
 
             # Cor da bbox por velocidade
             if smooth_speed >= 80:
@@ -145,7 +170,8 @@ class SpeedDetector:
             if bbox:
                 x1, y1, x2, y2 = bbox
                 cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-                label = f"ID {object_id}  {smooth_speed:4.1f} km/h"
+                plate_label = f" [{plate}]" if plate else ""
+                label = f"ID {object_id}{plate_label}  {smooth_speed:4.1f} km/h"
                 cv2.putText(annotated, label, (x1, max(y1 - 6, 14)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
                 cv2.circle(annotated, (cx, cy), 5, color, -1)
@@ -157,6 +183,7 @@ class SpeedDetector:
                     centroid=[cx, cy],
                     in_roi=in_roi,
                     alert=is_alert,
+                    license_plate=plate,
                 ))
 
         # ROI e FPS no frame
@@ -165,7 +192,7 @@ class SpeedDetector:
         cv2.putText(annotated, f"FPS {self._fps:4.1f}", (10, 24),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
         if frame_alerts:
-            cv2.putText(annotated, "⚠ VELOCIDADE EXCEDIDA", (10, 54),
+            cv2.putText(annotated, "! VELOCIDADE EXCEDIDA", (10, 54),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         # ── Estatísticas globais ─────────────────────────────────────────────

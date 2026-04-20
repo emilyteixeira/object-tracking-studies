@@ -1,12 +1,16 @@
 import asyncio
 import json
+import os
+import threading
 import time
 
 import cv2
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend import config
+from backend import database as db
 from backend.detector import SpeedDetector
 
 app = FastAPI(title="Truck Speed Detection API")
@@ -19,106 +23,167 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Singleton — mantém estado do rastreador entre frames
-detector = SpeedDetector()
+# ── Banco de dados ────────────────────────────────────────────────────────────
+_conn = db.init_db(config.DB_PATH)
+
+# ── Detector (singleton) ──────────────────────────────────────────────────────
+detector = SpeedDetector(conn=_conn)
+
+# ── Servir snapshots como arquivos estáticos ──────────────────────────────────
+os.makedirs(config.SNAPSHOT_DIR, exist_ok=True)
+app.mount("/snapshots", StaticFiles(directory=config.SNAPSHOT_DIR), name="snapshots")
 
 
-async def _detection_loop(queue: asyncio.Queue) -> None:
-    """
-    Roda em background: captura frames RTSP, processa e empurra para a queue.
-    Reconnecta automaticamente se o stream cair.
-    """
-    loop = asyncio.get_event_loop()
-    cap = None
+# ──────────────────────────────────────────────────────────────────────────────
+# RTSPReader: thread dedicada que lê o stream continuamente e guarda apenas
+# o frame mais recente. Desacopla RTSP de YOLO — os dois nunca se bloqueiam.
+# ──────────────────────────────────────────────────────────────────────────────
+class RTSPReader:
+    def __init__(self, url: str) -> None:
+        self._url = url
+        self._frame = None
+        self._counter = 0
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True, name="rtsp-reader")
 
-    def open_cap() -> cv2.VideoCapture:
-        c = cv2.VideoCapture(config.RTSP_URL, cv2.CAP_FFMPEG)
-        if not c.isOpened():
-            c = cv2.VideoCapture(config.RTSP_URL)
-        return c
+    def start(self) -> None:
+        self._thread.start()
 
-    try:
-        cap = await loop.run_in_executor(None, open_cap)
+    def stop(self) -> None:
+        self._stop_event.set()
 
-        while True:
-            ret, frame = await loop.run_in_executor(None, cap.read)
+    def get_latest(self):
+        with self._lock:
+            return self._counter, self._frame
 
+    def _open(self) -> cv2.VideoCapture:
+        cap = cv2.VideoCapture(self._url, cv2.CAP_FFMPEG)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(self._url)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        return cap
+
+    def _loop(self) -> None:
+        cap = self._open()
+        while not self._stop_event.is_set():
+            ret, frame = cap.read()
             if not ret:
-                # Stream perdido — tenta reconectar
                 cap.release()
-                await asyncio.sleep(2)
-                cap = await loop.run_in_executor(None, open_cap)
+                time.sleep(2)
+                cap = self._open()
                 continue
-
-            msg = detector.process_frame(frame)
-
-            # Descarta frame antigo se o frontend não consegue acompanhar
-            if queue.full():
-                try:
-                    queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-
-            queue.put_nowait(msg)
-
-    finally:
-        if cap is not None:
-            cap.release()
+            with self._lock:
+                self._frame = frame
+                self._counter += 1
+        cap.release()
 
 
+_rtsp_reader = RTSPReader(config.RTSP_URL)
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    _rtsp_reader.start()
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    _rtsp_reader.stop()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Loop de detecção
+# ──────────────────────────────────────────────────────────────────────────────
+async def _detection_loop(queue: asyncio.Queue) -> None:
+    loop = asyncio.get_event_loop()
+    last_counter = -1
+
+    while True:
+        counter, frame = _rtsp_reader.get_latest()
+
+        if frame is None or counter == last_counter:
+            await asyncio.sleep(0.01)
+            continue
+
+        last_counter = counter
+        msg = await loop.run_in_executor(None, detector.process_frame, frame.copy())
+
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+
+        queue.put_nowait(msg)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Loop de recepção WebSocket
+# ──────────────────────────────────────────────────────────────────────────────
+async def _recv_loop(websocket: WebSocket) -> None:
+    async for text in websocket.iter_text():
+        try:
+            data = json.loads(text)
+            if data.get("type") == "set_threshold":
+                detector.threshold_kmh = float(data["speed_threshold_kmh"])
+        except (json.JSONDecodeError, KeyError, ValueError):
+            pass
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Endpoint WebSocket
+# ──────────────────────────────────────────────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
 
     queue: asyncio.Queue = asyncio.Queue(maxsize=2)
-
-    # Inicia o loop de captura/detecção como task paralela
     detection_task = asyncio.ensure_future(_detection_loop(queue))
+    recv_task = asyncio.ensure_future(_recv_loop(websocket))
 
     try:
         while True:
-            # Aguarda o que chegar primeiro: novo frame OU mensagem do cliente
-            frame_future = asyncio.ensure_future(queue.get())
-            recv_future = asyncio.ensure_future(websocket.receive_text())
+            get_future = asyncio.ensure_future(queue.get())
 
-            done, pending = await asyncio.wait(
-                [frame_future, recv_future],
+            done, _ = await asyncio.wait(
+                [get_future, recv_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
-            # Cancela a tarefa que não completou
-            for t in pending:
-                t.cancel()
+            if recv_task in done:
+                get_future.cancel()
                 try:
-                    await t
+                    await get_future
                 except (asyncio.CancelledError, Exception):
                     pass
+                break
 
-            for t in done:
-                result = t.result()
-
-                # Mensagem recebida do frontend (ex.: atualização de threshold)
-                if isinstance(result, str):
-                    try:
-                        data = json.loads(result)
-                        if data.get("type") == "set_threshold":
-                            new_threshold = float(data["speed_threshold_kmh"])
-                            detector.threshold_kmh = new_threshold
-                    except (json.JSONDecodeError, KeyError, ValueError):
-                        pass
-
-                # Novo frame processado → envia ao frontend
-                else:
-                    await websocket.send_text(result.model_dump_json())
+            msg = get_future.result()
+            try:
+                await websocket.send_text(msg.model_dump_json())
+            except (WebSocketDisconnect, RuntimeError):
+                break
 
     except WebSocketDisconnect:
         pass
     finally:
         detection_task.cancel()
-        try:
-            await detection_task
-        except (asyncio.CancelledError, Exception):
-            pass
+        recv_task.cancel()
+        for t in (detection_task, recv_task):
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# REST endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+@app.get("/api/history")
+async def get_history(limit: int = 100):
+    """Retorna as últimas `limit` passagens de caminhões."""
+    return db.get_history(_conn, limit=limit)
 
 
 @app.get("/health")

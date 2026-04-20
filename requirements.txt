@@ -6,3 +6,5 @@ Pillow
 fastapi
 uvicorn[standard]
 python-multipart
+easyocr
+huggingface_hub

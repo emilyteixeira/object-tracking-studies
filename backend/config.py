@@ -39,3 +39,19 @@ SPEED_SMOOTHING_WINDOW: int = 5
 
 # Histórico máximo de alertas mantido em memória
 MAX_ALERT_HISTORY: int = 100
+
+# ── Detecção de placas ────────────────────────────────────────────────────────
+# Modelo YOLO para detecção de região de placa (baixado automaticamente do HuggingFace)
+PLATE_MODEL_PATH: str = "keremberke/yolov8n-license-plate-detection"
+
+# ── Banco de dados SQLite ─────────────────────────────────────────────────────
+DB_PATH: str = "truck_history.db"
+
+# Diretório para salvar snapshots dos caminhões (relativo à raiz do projeto)
+SNAPSHOT_DIR: str = "snapshots"
+
+# Identificador da câmera (útil para futuras instalações multi-câmera)
+CAMERA_ID: str = "cam01"
+
+# Intervalo de frames para rodar OCR dentro do ROI (throttle — OCR é lento)
+PLATE_OCR_INTERVAL: int = 10

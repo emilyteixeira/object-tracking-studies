@@ -1,16 +1,18 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import AlertBanner from "./components/AlertBanner";
+import HistoryTable from "./components/HistoryTable";
 import StatsPanel from "./components/StatsPanel";
 import ThresholdControl from "./components/ThresholdControl";
 import TruckTable from "./components/TruckTable";
 import VideoFeed from "./components/VideoFeed";
+import { useHistory } from "./hooks/useHistory";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { AlertEvent } from "./types";
 
 export default function App() {
   const { latestMessage, status, sendThreshold } = useWebSocket();
+  const { records, loading, error, refresh } = useHistory(100);
 
-  // Acumula alertas do frame atual sem perder os anteriores
   const pendingAlerts = useRef<AlertEvent[]>([]);
   if (latestMessage?.alerts.length) {
     pendingAlerts.current = latestMessage.alerts;
@@ -29,7 +31,7 @@ export default function App() {
             Detecção de Velocidade — Caminhões
           </h1>
           <p className="text-gray-400 text-xs mt-0.5">
-            Stream RTSP • YOLO11 • Rastreamento por centróide
+            Stream RTSP · YOLO11 · Rastreamento por centróide · OCR de placas
           </p>
         </div>
       </header>
@@ -52,6 +54,13 @@ export default function App() {
           <ThresholdControl
             currentThreshold={msg?.config.speed_threshold_kmh ?? 80}
             onSet={sendThreshold}
+          />
+
+          <HistoryTable
+            records={records}
+            loading={loading}
+            error={error}
+            onRefresh={refresh}
           />
         </div>
       </div>

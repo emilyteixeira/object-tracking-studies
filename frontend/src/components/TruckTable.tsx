@@ -19,6 +19,7 @@ export default function TruckTable({ trucks }: Props) {
             <thead className="bg-gray-800 text-gray-400 text-xs uppercase">
               <tr>
                 <th className="px-3 py-2 text-left">ID</th>
+                <th className="px-3 py-2 text-left">Placa</th>
                 <th className="px-3 py-2 text-right">Vel. (km/h)</th>
                 <th className="px-3 py-2 text-center">No ROI</th>
                 <th className="px-3 py-2 text-center">Alerta</th>
@@ -33,6 +34,13 @@ export default function TruckTable({ trucks }: Props) {
                   }`}
                 >
                   <td className="px-3 py-2 text-white font-mono">#{truck.id}</td>
+                  <td className="px-3 py-2 font-mono tracking-widest">
+                    {truck.license_plate ? (
+                      <span className="text-yellow-300 font-bold">{truck.license_plate}</span>
+                    ) : (
+                      <span className="text-gray-600 text-xs">—</span>
+                    )}
+                  </td>
                   <td
                     className={`px-3 py-2 text-right font-bold ${
                       truck.speed_kmh >= 80
