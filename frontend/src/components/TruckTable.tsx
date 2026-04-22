@@ -2,72 +2,138 @@ import { TruckData } from "../types";
 
 interface Props {
   trucks: TruckData[];
+  threshold: number;
 }
 
-export default function TruckTable({ trucks }: Props) {
+function speedClass(speed: number, threshold: number) {
+  if (speed >= threshold) return "over";
+  if (speed >= threshold * 0.75) return "warn";
+  return "ok";
+}
+
+export default function TruckTable({ trucks, threshold }: Props) {
   return (
-    <div className="space-y-2">
-      <h2 className="text-white font-semibold text-sm uppercase tracking-wide">
+    <div className="ds-card">
+      <div className="ds-card-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="1" y="3" width="15" height="13" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
+        </svg>
         Caminhões ativos
-      </h2>
+      </div>
 
       {trucks.length === 0 ? (
-        <p className="text-gray-500 text-sm">Nenhum caminhão no ROI.</p>
+        <p style={{ color: "var(--fg3)", fontSize: 13, textAlign: "center", padding: "14px 0" }}>
+          Nenhum caminhão detectado
+        </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-700">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-800 text-gray-400 text-xs uppercase">
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
               <tr>
-                <th className="px-3 py-2 text-left">ID</th>
-                <th className="px-3 py-2 text-left">Placa</th>
-                <th className="px-3 py-2 text-right">Vel. (km/h)</th>
-                <th className="px-3 py-2 text-center">No ROI</th>
-                <th className="px-3 py-2 text-center">Alerta</th>
+                {["ID", "Placa", "km/h", "ROI", "Alerta"].map((h, i) => (
+                  <th
+                    key={h}
+                    style={{
+                      textAlign: i === 2 ? "right" : i >= 3 ? "center" : "left",
+                      padding: "8px 10px",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.1em",
+                      color: "var(--fg2)",
+                      background: "rgba(0,0,0,0.25)",
+                      borderBottom: "1px solid var(--bg3)",
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {trucks.map((truck) => (
-                <tr
-                  key={truck.id}
-                  className={`border-t border-gray-700 ${
-                    truck.alert ? "bg-red-900/40" : "bg-gray-900"
-                  }`}
-                >
-                  <td className="px-3 py-2 text-white font-mono">#{truck.id}</td>
-                  <td className="px-3 py-2 font-mono tracking-widest">
-                    {truck.license_plate ? (
-                      <span className="text-yellow-300 font-bold">{truck.license_plate}</span>
-                    ) : (
-                      <span className="text-gray-600 text-xs">—</span>
-                    )}
-                  </td>
-                  <td
-                    className={`px-3 py-2 text-right font-bold ${
-                      truck.speed_kmh >= 80
-                        ? "text-red-400"
-                        : truck.speed_kmh >= 60
-                        ? "text-orange-400"
-                        : "text-green-400"
-                    }`}
+              {trucks.map((truck) => {
+                const cls = speedClass(truck.speed_kmh, threshold);
+                const speedColor =
+                  cls === "over" ? "#F87171" : cls === "warn" ? "#FBBF24" : "#34D399";
+                return (
+                  <tr
+                    key={truck.id}
+                    style={{
+                      background: truck.alert ? "rgba(239,68,68,0.08)" : undefined,
+                    }}
                   >
-                    {truck.speed_kmh.toFixed(1)}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {truck.in_roi ? (
-                      <span className="text-green-400">✓</span>
-                    ) : (
-                      <span className="text-gray-600">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {truck.alert ? (
-                      <span className="text-red-400 font-bold">⚠</span>
-                    ) : (
-                      <span className="text-gray-600">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderBottom: "1px solid rgba(255,255,255,0.04)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "var(--fg1)",
+                      }}
+                    >
+                      #{truck.id}
+                    </td>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderBottom: "1px solid rgba(255,255,255,0.04)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 12,
+                        letterSpacing: "0.15em",
+                        fontWeight: 700,
+                        color: "#FCD34D",
+                      }}
+                    >
+                      {truck.license_plate ?? (
+                        <span style={{ color: "var(--fg3)", letterSpacing: "normal" }}>—</span>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderBottom: "1px solid rgba(255,255,255,0.04)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        textAlign: "right",
+                        color: speedColor,
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {truck.speed_kmh.toFixed(1)}
+                    </td>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderBottom: "1px solid rgba(255,255,255,0.04)",
+                        textAlign: "center",
+                        fontSize: 14,
+                      }}
+                    >
+                      {truck.in_roi ? (
+                        <span style={{ color: "#34D399" }}>✓</span>
+                      ) : (
+                        <span style={{ color: "var(--fg3)" }}>—</span>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderBottom: "1px solid rgba(255,255,255,0.04)",
+                        textAlign: "center",
+                        fontSize: 14,
+                      }}
+                    >
+                      {truck.alert ? (
+                        <span style={{ color: "#F87171", fontWeight: 700 }}>⚠</span>
+                      ) : (
+                        <span style={{ color: "var(--fg3)" }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IA North · Detecção de Velocidade</title>
+  <style>
+    /* ── IANorth Design System ────────────────────────────────────────────── */
+    :root {
+      --bg1: #0B1120;
+      --bg2: #111827;
+      --bg3: #1F2937;
+      --fg1: #F9FAFB;
+      --fg2: #9CA3AF;
+      --fg3: #6B7280;
+      --accent-primary: #5667FB;
+      --accent-hover: #4757EB;
+      --accent-ring: rgba(86,103,251,0.25);
+      --status-success-soft: rgba(16,185,129,0.12);
+      --status-warning-soft: rgba(245,158,11,0.12);
+      --status-danger-soft: rgba(239,68,68,0.12);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+      --text-xs: 0.75rem;
+      --text-sm: 0.875rem;
+      --text-base: 1rem;
+      --text-lg: 1.125rem;
+      --text-xl: 1.25rem;
+      --text-2xl: 1.5rem;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --radius-full: 9999px;
+      --shadow-xl: 0 20px 60px rgba(0,0,0,0.5);
+      --dur-fast: 150ms;
+      --tracking-tight: -0.025em;
+      --tracking-wider: 0.08em;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--bg1);
+      color: var(--fg1);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+    }
+    body {
+      background:
+        radial-gradient(ellipse 80% 80% at 50% -20%, rgba(120,119,198,0.25), transparent 60%),
+        var(--bg1);
+    }
+
+    .app { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; margin-bottom: 24px;
+      background: rgba(0,0,0,0.3); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius-xl);
+    }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-logo {
+      width: 40px; height: 40px; border-radius: var(--radius-md);
+      background: var(--accent-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: 11px; font-weight: 900;
+      color: #fff; letter-spacing: -0.05em; flex-shrink: 0;
+    }
+    .brand h1 {
+      font-size: var(--text-2xl); font-weight: 700;
+      letter-spacing: var(--tracking-tight); color: var(--fg1);
+    }
+    .brand h1 .sub { color: var(--accent-primary); font-weight: 300; }
+    .brand p { margin-top: 2px; font-size: var(--text-sm); color: var(--fg2); }
+
+    .header-tools { display: flex; align-items: center; gap: 12px; }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: var(--radius-full);
+      font-size: var(--text-sm); font-weight: 600;
+      background: var(--status-success-soft); color: #34D399;
+      border: 1px solid rgba(16,185,129,0.25);
+    }
+    .status-pill .dot {
+      position: relative; width: 8px; height: 8px;
+      border-radius: 50%; background: #10B981;
+    }
+    .status-pill .dot::before {
+      content: ""; position: absolute; inset: 0;
+      border-radius: 50%; background: #10B981;
+      animation: ping 1.4s infinite;
+    }
+    .status-pill.warn {
+      background: var(--status-warning-soft); color: #FCD34D;
+      border-color: rgba(245,158,11,0.3);
+    }
+    .status-pill.warn .dot { background: #F59E0B; }
+    .status-pill.warn .dot::before { background: #F59E0B; }
+    .status-pill.err {
+      background: var(--status-danger-soft); color: #FCA5A5;
+      border-color: rgba(239,68,68,0.3);
+    }
+    .status-pill.err .dot { background: #EF4444; }
+    .status-pill.err .dot::before { display: none; }
+    @keyframes ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      gap: 20px; align-items: start;
+    }
+    @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+    /* ── Video Feed ──────────────────────────────────────────────────────── */
+    .video-wrap {
+      position: sticky; top: 20px;
+      border-radius: var(--radius-xl); overflow: hidden;
+      border: 4px solid var(--bg3); background: #000;
+      box-shadow: var(--shadow-xl);
+    }
+    .video-inner {
+      position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden;
+    }
+    .video-bg {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, #0a1220 0%, #1a2540 30%, #2a3550 60%, #151e30 100%);
+    }
+    /* Road */
+    .road {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 60%;
+      background: linear-gradient(180deg, transparent 0%, #1a2230 40%, #0e141c 100%);
+    }
+    .lane {
+      position: absolute; left: 50%; transform: translateX(-50%);
+      bottom: 0; width: 2px; height: 100%;
+      background: repeating-linear-gradient(
+        180deg,
+        rgba(255,255,255,0.4) 0 30px,
+        transparent 30px 60px
+      );
+    }
+    /* ROI band */
+    .roi {
+      position: absolute; left: 8%; right: 8%; top: 44%; height: 18%;
+      border: 2px dashed rgba(86,103,251,0.75);
+      background: rgba(86,103,251,0.08);
+      border-radius: 4px;
+    }
+    .roi .roi-lbl {
+      position: absolute; top: -22px; left: 0;
+      font-family: var(--font-mono); font-size: 10px;
+      letter-spacing: 0.1em; color: #C7D0FF; text-transform: uppercase;
+      background: rgba(11,18,32,0.85); padding: 2px 8px;
+      border-radius: 4px; border: 1px solid rgba(86,103,251,0.5);
+    }
+    /* Truck boxes */
+    .truck {
+      position: absolute; border: 2px solid #10B981;
+      background: rgba(16,185,129,0.08);
+      border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+      transition: left 0.5s ease, top 0.5s ease, border-color 0.3s, background 0.3s;
+    }
+    .truck .tag {
+      position: absolute; top: -22px; left: -2px;
+      font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+      background: #10B981; color: #fff;
+      padding: 2px 6px; border-radius: 3px 3px 0 0; white-space: nowrap;
+    }
+    .truck.warn { border-color: #F59E0B; background: rgba(245,158,11,0.12); }
+    .truck.warn .tag { background: #F59E0B; color: #111827; }
+    .truck.alert { border-color: #EF4444; background: rgba(239,68,68,0.15); animation: truck-pulse 1s infinite; }
+    .truck.alert .tag { background: #EF4444; }
+    @keyframes truck-pulse { 50% { box-shadow: 0 0 20px rgba(239,68,68,0.6); } }
+    /* Overlay chrome */
+    .feed-overlay { position: absolute; inset: 0; pointer-events: none; }
+    .feed-overlay .top-bar {
+      position: absolute; top: 12px; left: 12px; right: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 4px;
+      background: rgba(239,68,68,0.9); color: #fff;
+      font-family: var(--font-mono); font-size: 11px;
+      font-weight: 700; letter-spacing: 0.1em;
+    }
+    .live-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0.3; } }
+    .feed-meta {
+      font-family: var(--font-mono); font-size: 11px;
+      color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.5);
+      padding: 4px 10px; border-radius: 4px;
+    }
+    .feed-overlay .bottom-bar {
+      position: absolute; bottom: 12px; left: 12px; right: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: var(--font-mono); font-size: 11px; color: rgba(255,255,255,0.85);
+    }
+    .bottom-bar .fps { background: rgba(0,0,0,0.5); padding: 3px 8px; border-radius: 4px; }
+
+    /* ── Right Panels ────────────────────────────────────────────────────── */
+    .panels { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+    .card {
+      background: var(--bg2); border: 1px solid var(--bg3);
+      border-radius: var(--radius-xl); padding: 18px;
+    }
+    .card-title {
+      display: flex; align-items: center; gap: 10px;
+      font-size: var(--text-sm); font-weight: 700;
+      text-transform: uppercase; letter-spacing: var(--tracking-wider);
+      color: var(--fg2); margin: 0 0 14px;
+    }
+    .card-title svg { color: var(--accent-primary); flex-shrink: 0; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .card-head .card-title { margin: 0; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat {
+      background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg); padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg2); font-weight: 600; }
+    .stat .val { font-family: var(--font-mono); font-size: 22px; font-weight: 800; color: var(--fg1); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .stat .val .unit { font-size: 12px; color: var(--fg3); font-weight: 500; margin-left: 4px; }
+    .stat.hero .val { font-size: 28px; color: var(--accent-primary); }
+
+    /* Tables */
+    .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tbl thead th {
+      text-align: left; padding: 8px 10px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--fg2);
+      background: rgba(0,0,0,0.25); border-bottom: 1px solid var(--bg3);
+    }
+    .tbl tbody td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.04); font-family: var(--font-mono); font-size: 12px; }
+    .tbl tbody tr:last-child td { border-bottom: none; }
+    .tbl tbody tr.alert-row-tr { background: rgba(239,68,68,0.08); }
+    .tbl .id { color: var(--fg1); font-weight: 700; }
+    .tbl .plate { letter-spacing: 0.15em; font-weight: 700; color: #FCD34D; }
+    .tbl .speed { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .tbl .speed.ok { color: #34D399; }
+    .tbl .speed.warn { color: #FBBF24; }
+    .tbl .speed.over { color: #F87171; }
+    .tbl .center { text-align: center; }
+    .tbl .muted { color: var(--fg3); }
+    .empty { padding: 20px; text-align: center; color: var(--fg3); font-size: 13px; }
+
+    /* Alerts */
+    .alert-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px; gap: 10px;
+      background: rgba(127,29,29,0.28); border: 1px solid rgba(239,68,68,0.4);
+      border-radius: var(--radius-md); color: #FCA5A5; font-size: 13px;
+      animation: slide-in 0.3s ease-out;
+    }
+    .alert-row + .alert-row { margin-top: 6px; }
+    .alert-row strong { color: #FECACA; }
+    .alert-row .close { background: none; border: none; color: rgba(252,165,165,0.6); cursor: pointer; font-size: 16px; line-height: 1; }
+    .alert-row .close:hover { color: #fff; }
+    @keyframes slide-in { from { transform: translateX(20px); opacity: 0; } }
+
+    /* Threshold */
+    .threshold-current {
+      display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px;
+      padding: 10px 14px; background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius-md);
+    }
+    .threshold-current .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg2); font-weight: 600; }
+    .threshold-current .val { font-family: var(--font-mono); font-size: 22px; font-weight: 800; color: #F59E0B; font-variant-numeric: tabular-nums; margin-left: auto; }
+    .threshold-current .unit { font-size: 12px; color: var(--fg3); }
+    .threshold-form { display: flex; gap: 8px; }
+    .threshold-form input {
+      flex: 1; min-width: 0;
+      background: rgba(0,0,0,0.35); border: 1px solid var(--bg3);
+      border-radius: var(--radius-md); padding: 9px 12px;
+      color: var(--fg1); font-family: var(--font-mono); font-size: 14px; outline: none;
+    }
+    .threshold-form input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-ring); }
+    .btn-primary {
+      background: var(--accent-primary); color: #fff; border: none;
+      padding: 9px 18px; border-radius: var(--radius-md);
+      font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background var(--dur-fast);
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    /* History */
+    .history-wrap {
+      max-height: 320px; overflow-y: auto;
+      border: 1px solid var(--bg3); border-radius: var(--radius-md);
+    }
+    .history-wrap table { font-size: 11px; }
+    .history-wrap thead th { position: sticky; top: 0; z-index: 1; }
+
+    .refresh-btn {
+      background: none; border: none; color: var(--fg2); font-size: 12px;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 8px; border-radius: var(--radius-sm);
+    }
+    .refresh-btn:hover { color: var(--accent-primary); background: rgba(86,103,251,0.08); }
+    .refresh-btn.spinning svg { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+
+    footer { text-align: center; margin-top: 32px; color: var(--fg3); font-size: 12px; }
+    footer code { font-family: var(--font-mono); }
+  </style>
+</head>
+<body>
+<div class="app" data-screen-label="Speed Dashboard">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-logo">IAN</div>
+      <div>
+        <h1>IA North <span class="sub">| Detecção de Velocidade</span></h1>
+        <p>Monitoramento de caminhões em tempo real</p>
+      </div>
+    </div>
+    <div class="header-tools">
+      <span class="status-pill" id="conn-pill">
+        <span class="dot"></span>
+        <span id="conn-label">Conectado</span>
+      </span>
+    </div>
+  </header>
+
+  <!-- Main layout -->
+  <div class="layout">
+
+    <!-- Video feed -->
+    <div class="video-wrap">
+      <div class="video-inner">
+        <div class="video-bg"></div>
+        <div class="road"><div class="lane"></div></div>
+        <div class="roi"><div class="roi-lbl">Zona de medição</div></div>
+        <!-- Truck bounding boxes injected by JS -->
+        <div id="trucks-canvas"></div>
+        <!-- Overlay chrome -->
+        <div class="feed-overlay">
+          <div class="top-bar">
+            <div class="live-badge"><div class="dot"></div> LIVE</div>
+            <div class="feed-meta">CAM01 · <span id="feed-time">--:--:--</span></div>
+          </div>
+          <div class="bottom-bar">
+            <span>RTSP · 10.6.51.220</span>
+            <span class="fps" id="fps-badge">-- fps</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right panels -->
+    <div class="panels">
+
+      <!-- Stats -->
+      <div class="card">
+        <div class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Estatísticas do sistema
+        </div>
+        <div class="stats">
+          <div class="stat"><span class="lbl">Total detectados</span><span class="val" id="stat-total">0</span></div>
+          <div class="stat"><span class="lbl">Ativos agora</span><span class="val" id="stat-active">0</span></div>
+          <div class="stat hero"><span class="lbl">Vel. média</span><span class="val" id="stat-avg">--<span class="unit">km/h</span></span></div>
+          <div class="stat"><span class="lbl">Vel. máx</span><span class="val" id="stat-max">--<span class="unit">km/h</span></span></div>
+          <div class="stat"><span class="lbl">Vel. mín</span><span class="val" id="stat-min">--<span class="unit">km/h</span></span></div>
+          <div class="stat"><span class="lbl">FPS</span><span class="val" id="stat-fps">--</span></div>
+        </div>
+      </div>
+
+      <!-- Active trucks -->
+      <div class="card">
+        <div class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          Caminhões ativos
+        </div>
+        <table class="tbl">
+          <thead><tr><th>ID</th><th>Placa</th><th style="text-align:right">km/h</th><th class="center">ROI</th><th class="center">Alerta</th></tr></thead>
+          <tbody id="trucks-body"><tr><td colspan="5" class="empty">Nenhum caminhão detectado</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- Speed alerts -->
+      <div class="card">
+        <div class="card-title" style="color:#FCA5A5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Alertas de velocidade
+        </div>
+        <div id="alerts-list"><p class="empty">Nenhum alerta</p></div>
+      </div>
+
+      <!-- Speed threshold -->
+      <div class="card">
+        <div class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Limite de velocidade
+        </div>
+        <div class="threshold-current">
+          <span class="lbl">Limite atual</span>
+          <span class="val" id="thr-display">80<span class="unit" style="margin-left:4px">km/h</span></span>
+        </div>
+        <form class="threshold-form" onsubmit="event.preventDefault(); applyThreshold()">
+          <input type="number" min="1" max="300" value="80" id="thr-input" placeholder="km/h">
+          <button type="submit" class="btn-primary">Aplicar</button>
+        </form>
+      </div>
+
+      <!-- History -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            Histórico de passagens
+          </div>
+          <button class="refresh-btn" id="refresh-btn" onclick="refreshHistory()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Atualizar
+          </button>
+        </div>
+        <div class="history-wrap">
+          <table class="tbl" id="history-table">
+            <thead><tr><th>Entrada</th><th>Saída</th><th>Placa</th><th style="text-align:right">km/h</th></tr></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- .panels -->
+  </div><!-- .layout -->
+
+  <footer>
+    Protótipo baseado em <code>object-tracking-studies</code> · IA North © 2025
+  </footer>
+</div><!-- .app -->
+
+<script>
+/* ── Simulation state ──────────────────────────────────────────────────────── */
+let threshold = 80;
+let frameIdx = 0;
+let totalSeen = 5;
+let alertCount = 0;
+
+const MOCK_TRUCKS = [
+  { id: 101, plate: 'BRA2E19', x: 12, y: 30, w: 16, h: 12, speed: 54, phase: 0 },
+  { id: 102, plate: 'ABC1234', x: 55, y: 44, w: 18, h: 13, speed: 76, phase: 1.2 },
+  { id: 103, plate: 'RIO2K14', x: 30, y: 55, w: 15, h: 11, speed: 93, phase: 2.5 },
+];
+
+const HISTORY_DATA = [
+  { entry: '08:42:15', exit: '08:42:31', plate: 'ABC-1234', speed: 61, alert: false },
+  { entry: '09:14:02', exit: '09:14:18', plate: 'RIO2K14', speed: 88, alert: true  },
+  { entry: '10:05:44', exit: '10:06:01', plate: 'BRA2E19', speed: 54, alert: false },
+  { entry: '11:30:09', exit: '11:30:27', plate: 'MER5C23', speed: 97, alert: true  },
+  { entry: '12:01:55', exit: '12:02:11', plate: '—',       speed: 70, alert: false },
+];
+
+/* ── Clock ─────────────────────────────────────────────────────────────────── */
+function tick() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const el = document.getElementById('feed-time');
+  if (el) el.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+setInterval(tick, 1000); tick();
+
+/* ── Truck animation ───────────────────────────────────────────────────────── */
+const canvas = document.getElementById('trucks-canvas');
+
+function speedClass(spd) {
+  if (spd >= threshold) return 'alert';
+  if (spd >= threshold * 0.75) return 'warn';
+  return '';
+}
+
+function renderTrucks() {
+  const t = Date.now() / 1000;
+  canvas.innerHTML = '';
+
+  MOCK_TRUCKS.forEach(truck => {
+    // Oscillate position left→right with individual phase
+    const progress = ((t * 0.04 + truck.phase * 0.15) % 1 + 1) % 1;
+    const px = progress * (84 - truck.w);  // % from left
+    const pyBase = truck.y;
+    const pyOsc  = Math.sin(t * 0.3 + truck.phase) * 2;
+    const py = pyBase + pyOsc;
+
+    // Vary speed slightly
+    const speedJitter = Math.sin(t * 0.7 + truck.phase * 2) * 4;
+    const spd = Math.max(0, truck.speed + speedJitter);
+
+    const cls = speedClass(spd);
+    const div = document.createElement('div');
+    div.className = 'truck' + (cls ? ' ' + cls : '');
+    div.style.cssText = `
+      left: ${px}%;
+      top:  ${py}%;
+      width:  ${truck.w}%;
+      height: ${truck.h}%;
+    `;
+    div.innerHTML = `<div class="tag">#${truck.id} · ${spd.toFixed(0)} km/h</div>`;
+    canvas.appendChild(div);
+  });
+}
+
+/* ── Stats update ──────────────────────────────────────────────────────────── */
+function updateStats() {
+  const t = Date.now() / 1000;
+  const speeds = MOCK_TRUCKS.map(truck => {
+    const jitter = Math.sin(t * 0.7 + truck.phase * 2) * 4;
+    return Math.max(0, truck.speed + jitter);
+  });
+  const avg  = speeds.reduce((a, b) => a + b, 0) / speeds.length;
+  const max  = Math.max(...speeds);
+  const min  = Math.min(...speeds);
+  const fps  = 14 + Math.sin(t * 2) * 1.5;
+
+  document.getElementById('stat-total').textContent  = totalSeen;
+  document.getElementById('stat-active').textContent = MOCK_TRUCKS.length;
+  document.getElementById('stat-avg').innerHTML      = `${avg.toFixed(1)}<span class="unit">km/h</span>`;
+  document.getElementById('stat-max').innerHTML      = `${max.toFixed(1)}<span class="unit">km/h</span>`;
+  document.getElementById('stat-min').innerHTML      = `${min.toFixed(1)}<span class="unit">km/h</span>`;
+  document.getElementById('stat-fps').textContent    = fps.toFixed(1);
+  document.getElementById('fps-badge').textContent   = `${fps.toFixed(0)} fps`;
+
+  // Trucks table
+  const tbody = document.getElementById('trucks-body');
+  tbody.innerHTML = '';
+  MOCK_TRUCKS.forEach((truck, i) => {
+    const spd  = speeds[i];
+    const inRoi = (truck.y >= 44 && truck.y <= 62);
+    const isAlert = spd >= threshold;
+    const cls  = spd >= threshold ? 'over' : spd >= threshold * 0.75 ? 'warn' : 'ok';
+    const tr   = document.createElement('tr');
+    if (isAlert) tr.classList.add('alert-row-tr');
+    tr.innerHTML = `
+      <td class="id">#${truck.id}</td>
+      <td class="plate">${truck.plate}</td>
+      <td class="speed ${cls}">${spd.toFixed(1)}</td>
+      <td class="center">${inRoi ? '<span style="color:#34D399">✓</span>' : '<span style="color:var(--fg3)">—</span>'}</td>
+      <td class="center">${isAlert ? '<span style="color:#F87171">⚠</span>' : '<span style="color:var(--fg3)">—</span>'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ── Alert generation ──────────────────────────────────────────────────────── */
+function maybeFireAlert() {
+  const t = Date.now() / 1000;
+  MOCK_TRUCKS.forEach(truck => {
+    const jitter = Math.sin(t * 0.7 + truck.phase * 2) * 4;
+    const spd = truck.speed + jitter;
+    if (spd >= threshold && Math.random() < 0.003) {
+      addAlert(truck.id, spd.toFixed(1), threshold);
+    }
+  });
+}
+
+function addAlert(truckId, speed, thr) {
+  const list = document.getElementById('alerts-list');
+  const empty = list.querySelector('.empty');
+  if (empty) empty.remove();
+
+  const now  = new Date();
+  const pad  = n => String(n).padStart(2,'0');
+  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+  const row = document.createElement('div');
+  row.className = 'alert-row';
+  row.innerHTML = `
+    <span>
+      <strong>Caminhão #${truckId}</strong> — ${speed} km/h
+      <span style="color:var(--fg3);font-size:11px;margin-left:6px">(limite: ${thr} km/h · ${time})</span>
+    </span>
+    <button class="close" title="Fechar">×</button>
+  `;
+  row.querySelector('.close').addEventListener('click', () => row.remove());
+  list.prepend(row);
+
+  // Auto-dismiss after 10 s
+  setTimeout(() => row.remove(), 10000);
+  alertCount++;
+}
+
+/* ── Threshold ─────────────────────────────────────────────────────────────── */
+function applyThreshold() {
+  const v = Number(document.getElementById('thr-input').value);
+  if (!v || v < 1 || v > 300) return;
+  threshold = v;
+  document.getElementById('thr-display').innerHTML = `${v}<span class="unit" style="margin-left:4px">km/h</span>`;
+}
+
+/* ── History table ─────────────────────────────────────────────────────────── */
+function renderHistory() {
+  const tbody = document.getElementById('history-body');
+  tbody.innerHTML = '';
+  HISTORY_DATA.forEach(row => {
+    const cls = row.speed >= 80 ? 'over' : row.speed >= 60 ? 'warn' : 'ok';
+    const tr  = document.createElement('tr');
+    if (row.alert) tr.classList.add('alert-row-tr');
+    tr.innerHTML = `
+      <td class="muted">${row.entry}</td>
+      <td class="muted">${row.exit}</td>
+      <td class="plate">${row.plate}</td>
+      <td class="speed ${cls}">${row.speed}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function refreshHistory() {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+  setTimeout(() => btn.classList.remove('spinning'), 800);
+}
+
+/* ── Seed initial alert ────────────────────────────────────────────────────── */
+setTimeout(() => addAlert(103, '93.4', threshold), 2000);
+
+/* ── Main loop ─────────────────────────────────────────────────────────────── */
+renderHistory();
+function loop() {
+  frameIdx++;
+  renderTrucks();
+  updateStats();
+  maybeFireAlert();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

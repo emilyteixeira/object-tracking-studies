@@ -23,39 +23,58 @@ export default function App() {
   const msg = latestMessage;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-4">
-      {/* Cabeçalho */}
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">
-            Detecção de Velocidade — Caminhões
-          </h1>
-          <p className="text-gray-400 text-xs mt-0.5">
-            Stream RTSP · YOLO11 · Rastreamento por centróide · OCR de placas
-          </p>
+    <div className="min-h-screen p-6" style={{ maxWidth: 1600, margin: "0 auto" }}>
+      {/* Header */}
+      <header className="glass-header rounded-2xl px-5 py-4 mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="brand-logo">IAN</div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              IA North{" "}
+              <span style={{ color: "var(--accent-primary)", fontWeight: 300 }}>
+                | Detecção de Velocidade
+              </span>
+            </h1>
+            <p className="text-sm mt-0.5" style={{ color: "var(--fg2)" }}>
+              Monitoramento de caminhões em tempo real
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span
+            className={`status-pill${
+              status === "connecting" ? " warn" : status === "disconnected" ? " err" : ""
+            }`}
+          >
+            <span className="dot" />
+            {status === "connected"
+              ? "Conectado"
+              : status === "connecting"
+              ? "Conectando..."
+              : "Desconectado"}
+          </span>
         </div>
       </header>
 
-      {/* Layout principal */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Coluna esquerda — feed de vídeo */}
-        <div className="lg:flex-[2]">
+      {/* Main layout: video left (2fr) + panels right (1fr) */}
+      <div
+        className="grid gap-5 items-start"
+        style={{ gridTemplateColumns: "minmax(0,2fr) minmax(0,1fr)" }}
+      >
+        {/* Video feed */}
+        <div style={{ position: "sticky", top: 20 }}>
           <VideoFeed frame={msg?.frame ?? ""} status={status} />
         </div>
 
-        {/* Coluna direita — painel de controle */}
-        <div className="lg:flex-[1] flex flex-col gap-4">
+        {/* Right panels */}
+        <div className="flex flex-col gap-4">
           <StatsPanel stats={msg?.stats ?? null} />
-
-          <TruckTable trucks={msg?.trucks ?? []} />
-
+          <TruckTable trucks={msg?.trucks ?? []} threshold={msg?.config.speed_threshold_kmh ?? 80} />
           <AlertBanner newAlerts={pendingAlerts.current} />
-
           <ThresholdControl
             currentThreshold={msg?.config.speed_threshold_kmh ?? 80}
             onSet={sendThreshold}
           />
-
           <HistoryTable
             records={records}
             loading={loading}
