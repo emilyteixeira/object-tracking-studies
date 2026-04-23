@@ -4,26 +4,29 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Fonte de vídeo RTSP (câmera IP)
-RTSP_URL: str = "rtsp://admin:eletricasnb2021@10.6.51.220:554/cam/realmonitor?channel=1&subtype=1"
+RTSP_URL: str = "rtsp://admin:eletricasnb2021@10.6.51.206:554/cam/realmonitor?channel=1&subtype=1"
 
-# Modelo YOLO (baixado automaticamente pelo ultralytics na primeira execução)
-MODEL_PATH: str = "yolo11n.pt"
+# Modelo YOLO — use "yolo11n.pt" inicialmente; após rodar export_tensorrt.py troque por "yolo11n.engine"
+MODEL_PATH: str = "yolo11n.engine"
 
 # Classe COCO para caminhão — NÃO alterar para lista; apenas caminhões são rastreados.
 # Classes COCO: car=2, motorcycle=3, bus=5, truck=7
 TRUCK_CLASS: int = 7
 
 # Calibração: quantos metros correspondem a 1 pixel na cena
-# Exemplo: se 10 metros na pista equivalem a 200 pixels → 10/200 = 0.05 m/px
-METERS_PER_PIXEL: float = 10.0 / 200.0
+# Exemplo: se 270 mm (0.270 m) na pista equivalem a 1024 pixels → 0.270/1024 = 0.0002636 m/px
+METERS_PER_PIXEL: float = 0.2858 / 1080.0
 
 # Região de interesse (eixo Y) onde a velocidade é medida
-ROI_Y_MIN: int = 300
+ROI_Y_MIN: int = 200
 ROI_Y_MAX: int = 600
 
 # Filtros de detecção
 MIN_AREA: int = 400          # área mínima da bbox em pixels²
 CONFIDENCE: float = 0.5      # confiança mínima do YOLO
+
+# FPS fixo da câmera — usado no cálculo de velocidade e na captura RTSP
+FPS: int = 30
 
 # Rastreamento
 MAX_DISAPPEARED: int = 20    # frames sem detecção antes de remover o objeto
@@ -42,7 +45,7 @@ MAX_ALERT_HISTORY: int = 100
 
 # ── Detecção de placas ────────────────────────────────────────────────────────
 # Modelo YOLO para detecção de região de placa (baixado automaticamente do HuggingFace)
-PLATE_MODEL_PATH: str = "keremberke/yolov8n-license-plate-detection"
+PLATE_MODEL_PATH: str = "https://huggingface.co/felipedutrain/placa-br-yolov11/resolve/main/best.pt"
 
 # ── Banco de dados SQLite ─────────────────────────────────────────────────────
 DB_PATH: str = "truck_history.db"

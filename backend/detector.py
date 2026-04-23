@@ -1,4 +1,5 @@
 import base64
+import json
 import math
 import sqlite3
 import time
@@ -15,14 +16,25 @@ from backend.centroid_tracker import CentroidTracker
 from backend.models import AlertEvent, ConfigData, FrameMessage, Stats, TruckData
 from backend.passage_tracker import PassageTracker
 
+CALIBRATION_FILE = "calibration.json"
+
+
+def _load_calibration() -> float:
+    try:
+        with open(CALIBRATION_FILE) as f:
+            return float(json.load(f)["meters_per_pixel"])
+    except Exception:
+        return config.METERS_PER_PIXEL
+
 
 class SpeedDetector:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.model = YOLO(config.MODEL_PATH)
+        self.model.to("cuda")
 
-        # Aquece o modelo para evitar latência no primeiro frame real
+        # Aquece o modelo na GPU para evitar latência no primeiro frame real
         dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-        self.model(dummy, verbose=False)
+        self.model(dummy, device=0, half=True, verbose=False)
 
         self.ct = CentroidTracker(max_disappeared=config.MAX_DISAPPEARED)
 
@@ -41,9 +53,11 @@ class SpeedDetector:
         # Limite de velocidade (pode ser alterado em tempo de execução via WebSocket)
         self.threshold_kmh: float = config.DEFAULT_THRESHOLD_KMH
 
+        # Calibração dinâmica — persiste em calibration.json, atualizável via /api/calibrate
+        self.meters_per_pixel: float = _load_calibration()
+
         self._frame_idx: int = 0
-        self._fps: float = 30.0
-        self._last_time: float = time.time()
+        self._fps: float = float(config.FPS)
 
         # Histórico de passagens (SQLite + OCR de placas)
         self.passage_tracker = PassageTracker(conn)
@@ -53,15 +67,10 @@ class SpeedDetector:
     # ──────────────────────────────────────────────────────────────────────────
     def process_frame(self, frame: np.ndarray) -> FrameMessage:
         self._frame_idx += 1
-
-        # Calcula FPS em tempo real
         now = time.time()
-        dt = now - self._last_time if (now - self._last_time) > 1e-6 else 1e-6
-        self._fps = 1.0 / dt
-        self._last_time = now
 
         # ── Detecção YOLO (apenas caminhões — classe 7) ──────────────────────
-        results = self.model(frame, imgsz=640, conf=config.CONFIDENCE, verbose=False)[0]
+        results = self.model(frame, imgsz=640, conf=config.CONFIDENCE, device=0, half=True, verbose=False)[0]
         boxes = results.boxes
 
         rects: List[Tuple[int, int, int, int]] = []
@@ -118,7 +127,7 @@ class SpeedDetector:
                     if df > 0:
                         dpx = math.hypot(cx - last_cx, cy - last_cy)
                         dt_frames = df / max(self._fps, 1e-6)
-                        raw_speed = (dpx * config.METERS_PER_PIXEL / dt_frames) * 3.6
+                        raw_speed = (dpx * self.meters_per_pixel / dt_frames) * 3.6
                 self.last_pos[object_id] = (cx, cy, self._frame_idx)
 
             # Média móvel para suavizar a velocidade
@@ -223,6 +232,6 @@ class SpeedDetector:
                 speed_threshold_kmh=self.threshold_kmh,
                 roi_y_min=config.ROI_Y_MIN,
                 roi_y_max=config.ROI_Y_MAX,
-                meters_per_pixel=config.METERS_PER_PIXEL,
+                meters_per_pixel=self.meters_per_pixel,
             ),
         )

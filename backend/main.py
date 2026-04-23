@@ -1,17 +1,19 @@
 import asyncio
 import json
+import math
 import os
 import threading
 import time
 
 import cv2
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from backend import config
 from backend import database as db
-from backend.detector import SpeedDetector
+from backend.detector import CALIBRATION_FILE, SpeedDetector
 
 app = FastAPI(title="Truck Speed Detection API")
 
@@ -62,6 +64,7 @@ class RTSPReader:
         if not cap.isOpened():
             cap = cv2.VideoCapture(self._url)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(cv2.CAP_PROP_FPS, config.FPS)
         return cap
 
     def _loop(self) -> None:
@@ -184,6 +187,40 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 async def get_history(limit: int = 100):
     """Retorna as últimas `limit` passagens de caminhões."""
     return db.get_history(_conn, limit=limit)
+
+
+class CalibrateRequest(BaseModel):
+    meters_per_pixel: float | None = None
+    px1: list[int] | None = None   # [x, y]
+    px2: list[int] | None = None   # [x, y]
+    real_meters: float | None = None
+
+
+@app.post("/api/calibrate")
+def calibrate(req: CalibrateRequest):
+    """Atualiza a calibração meters_per_pixel em tempo real.
+
+    Opção 1 — valor direto:     { "meters_per_pixel": 0.000264 }
+    Opção 2 — dois pontos:      { "px1": [x1,y1], "px2": [x2,y2], "real_meters": 15.0 }
+    """
+    if req.meters_per_pixel is not None:
+        mpp = req.meters_per_pixel
+    elif req.px1 and req.px2 and req.real_meters:
+        pixel_dist = math.hypot(req.px2[0] - req.px1[0], req.px2[1] - req.px1[1])
+        if pixel_dist == 0:
+            raise HTTPException(status_code=400, detail="px1 e px2 não podem ser o mesmo ponto")
+        mpp = req.real_meters / pixel_dist
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Forneça 'meters_per_pixel' ou 'px1' + 'px2' + 'real_meters'",
+        )
+
+    detector.meters_per_pixel = mpp
+    with open(CALIBRATION_FILE, "w") as f:
+        json.dump({"meters_per_pixel": mpp}, f)
+
+    return {"meters_per_pixel": mpp}
 
 
 @app.get("/health")
