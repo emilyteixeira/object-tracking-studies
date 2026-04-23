@@ -1,6 +1,7 @@
 import base64
 import json
 import math
+import os
 import sqlite3
 import time
 from collections import deque
@@ -8,6 +9,7 @@ from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 from backend import config
@@ -29,12 +31,22 @@ def _load_calibration() -> float:
 
 class SpeedDetector:
     def __init__(self, conn: sqlite3.Connection) -> None:
-        self.model = YOLO(config.MODEL_PATH)
-        self.model.to("cuda")
+        _cuda = torch.cuda.is_available()
+        self._device = 0 if _cuda else "cpu"
+        self._half = _cuda  # FP16 só funciona em CUDA
 
-        # Aquece o modelo na GPU para evitar latência no primeiro frame real
+        # Se o .engine não existir (ex: ambiente de dev sem GPU), usa o .pt como fallback
+        model_path = config.MODEL_PATH
+        if model_path.endswith(".engine") and not os.path.exists(model_path):
+            model_path = model_path.replace(".engine", ".pt")
+
+        self.model = YOLO(model_path)
+        if _cuda:
+            self.model.to("cuda")
+
+        # Aquece o modelo para evitar latência no primeiro frame real
         dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-        self.model(dummy, device=0, half=True, verbose=False)
+        self.model(dummy, device=self._device, half=self._half, verbose=False)
 
         self.ct = CentroidTracker(max_disappeared=config.MAX_DISAPPEARED)
 
@@ -70,7 +82,7 @@ class SpeedDetector:
         now = time.time()
 
         # ── Detecção YOLO (apenas caminhões — classe 7) ──────────────────────
-        results = self.model(frame, imgsz=640, conf=config.CONFIDENCE, device=0, half=True, verbose=False)[0]
+        results = self.model(frame, imgsz=640, conf=config.CONFIDENCE, device=self._device, half=self._half, verbose=False)[0]
         boxes = results.boxes
 
         rects: List[Tuple[int, int, int, int]] = []
