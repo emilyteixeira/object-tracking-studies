@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConnectionStatus } from "../types";
 
 interface Props {
   frame: string;
   status: ConnectionStatus;
+  roiYMin?: number;
+  roiYMax?: number;
+}
+
+interface CameraInfo {
+  ip: string;
+  channel: string;
 }
 
 function useClock() {
@@ -21,8 +28,27 @@ function useClock() {
   return time;
 }
 
-export default function VideoFeed({ frame, status }: Props) {
+export default function VideoFeed({ frame, status, roiYMin = 200, roiYMax = 600 }: Props) {
   const time = useClock();
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [frameHeight, setFrameHeight] = useState(0);
+  const [cameraInfo, setCameraInfo] = useState<CameraInfo>({ ip: "...", channel: "1" });
+
+  useEffect(() => {
+    fetch("/api/camera-info")
+      .then((r) => r.json())
+      .then((data: CameraInfo) => setCameraInfo(data))
+      .catch(() => {});
+  }, []);
+
+  const handleImageLoad = () => {
+    const h = imgRef.current?.naturalHeight ?? 0;
+    if (h > 0 && h !== frameHeight) setFrameHeight(h);
+  };
+
+  const roiTop = frameHeight > 0 ? `${(roiYMin / frameHeight) * 100}%` : "44%";
+  const roiHeight =
+    frameHeight > 0 ? `${((roiYMax - roiYMin) / frameHeight) * 100}%` : "18%";
 
   return (
     <div
@@ -37,9 +63,11 @@ export default function VideoFeed({ frame, status }: Props) {
       {/* Video content */}
       {frame ? (
         <img
+          ref={imgRef}
           src={`data:image/jpeg;base64,${frame}`}
           alt="Feed ao vivo"
           className="w-full h-auto block"
+          onLoad={handleImageLoad}
         />
       ) : (
         <div
@@ -58,7 +86,7 @@ export default function VideoFeed({ frame, status }: Props) {
       {/* ROI band overlay */}
       <div
         className="roi-band"
-        style={{ top: "44%", height: "18%" }}
+        style={{ top: roiTop, height: roiHeight }}
       >
         <span className="roi-label">Zona de medição</span>
       </div>
@@ -87,7 +115,7 @@ export default function VideoFeed({ frame, status }: Props) {
           color: "rgba(255,255,255,0.75)",
         }}
       >
-        <span>RTSP · 10.6.51.220</span>
+        <span>RTSP · {cameraInfo.ip} · CH{cameraInfo.channel}</span>
         <span
           style={{
             background: "rgba(0,0,0,0.5)",

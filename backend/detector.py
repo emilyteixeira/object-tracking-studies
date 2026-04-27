@@ -41,8 +41,6 @@ class SpeedDetector:
             model_path = model_path.replace(".engine", ".pt")
 
         self.model = YOLO(model_path)
-        if _cuda:
-            self.model.to("cuda")
 
         # Aquece o modelo para evitar latência no primeiro frame real
         dummy = np.zeros((640, 640, 3), dtype=np.uint8)

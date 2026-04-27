@@ -14,8 +14,8 @@ MODEL_PATH: str = "yolo11n.engine"
 TRUCK_CLASS: int = 7
 
 # Calibração: quantos metros correspondem a 1 pixel na cena
-# Exemplo: se 270 mm (0.270 m) na pista equivalem a 1024 pixels → 0.270/1024 = 0.0002636 m/px
-METERS_PER_PIXEL: float = 0.2858 / 1080.0
+# Exemplo: se 10 m na pista equivalem a 250 pixels → 10/250 = 0.04 m/px
+METERS_PER_PIXEL: float = 10 / 250
 
 # Região de interesse (eixo Y) onde a velocidade é medida
 ROI_Y_MIN: int = 200

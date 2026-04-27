@@ -223,6 +223,16 @@ def calibrate(req: CalibrateRequest):
     return {"meters_per_pixel": mpp}
 
 
+@app.get("/api/camera-info")
+def camera_info():
+    """Retorna IP e canal da câmera sem expor credenciais."""
+    import re
+    m = re.search(r"@([\d.]+):\d+/[^?]*\??(.*)$", config.RTSP_URL)
+    ip = m.group(1) if m else "unknown"
+    params = dict(p.split("=", 1) for p in m.group(2).split("&") if "=" in p) if m else {}
+    return {"ip": ip, "channel": params.get("channel", "1")}
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "timestamp": time.time()}

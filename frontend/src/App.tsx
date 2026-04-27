@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import ianorthLogo from "./assets/ianorth-logo.svg";
 import AlertBanner from "./components/AlertBanner";
 import HistoryTable from "./components/HistoryTable";
 import StatsPanel from "./components/StatsPanel";
@@ -27,10 +28,10 @@ export default function App() {
       {/* Header */}
       <header className="glass-header rounded-2xl px-5 py-4 mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="brand-logo">IAN</div>
+          <img src={ianorthLogo} alt="IANorth" style={{ height: 40, width: "auto" }} />
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              IA North{" "}
+              IANorth{" "}
               <span style={{ color: "var(--accent-primary)", fontWeight: 300 }}>
                 | Detecção de Velocidade
               </span>
@@ -63,7 +64,12 @@ export default function App() {
       >
         {/* Video feed */}
         <div style={{ position: "sticky", top: 20 }}>
-          <VideoFeed frame={msg?.frame ?? ""} status={status} />
+          <VideoFeed
+            frame={msg?.frame ?? ""}
+            status={status}
+            roiYMin={msg?.config.roi_y_min ?? 200}
+            roiYMax={msg?.config.roi_y_max ?? 600}
+          />
         </div>
 
         {/* Right panels */}
