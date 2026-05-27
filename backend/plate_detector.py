@@ -50,7 +50,8 @@ class PlateDetector:
 
         # EasyOCR — inicializado uma única vez (lento na primeira chamada)
         import easyocr  # import tardio para não atrasar o startup se não instalado
-        self._ocr = easyocr.Reader(["pt", "en"], gpu=False, verbose=False)
+        import torch
+        self._ocr = easyocr.Reader(["pt", "en"], gpu=torch.cuda.is_available(), verbose=False)
 
     def read(
         self,

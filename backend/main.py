@@ -8,6 +8,7 @@ import time
 import cv2
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -17,9 +18,12 @@ from backend.detector import CALIBRATION_FILE, SpeedDetector
 
 app = FastAPI(title="Truck Speed Detection API")
 
+_extra_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+_cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173"] + [o.strip() for o in _extra_origins if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,8 +64,16 @@ class RTSPReader:
             return self._counter, self._frame
 
     def _open(self) -> cv2.VideoCapture:
+        # TCP evita perda de pacotes UDP que causa "Could not find ref with POC" em HEVC
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+            "rtsp_transport;tcp|"
+            "stimeout;5000000|"       # timeout de conexão: 5 s
+            "fflags;nobuffer|"
+            "flags;low_delay"
+        )
         cap = cv2.VideoCapture(self._url, cv2.CAP_FFMPEG)
         if not cap.isOpened():
+            os.environ.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS", None)
             cap = cv2.VideoCapture(self._url)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         cap.set(cv2.CAP_PROP_FPS, config.FPS)
@@ -236,3 +248,15 @@ def camera_info():
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "timestamp": time.time()}
+
+
+# ── Frontend (SPA) — deve ficar DEPOIS de todos os endpoints da API ───────────
+_DIST = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+if os.path.isdir(_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_DIST, "assets")), name="spa-assets")
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str = "") -> FileResponse:
+        index = os.path.join(_DIST, "index.html")
+        return FileResponse(index)

@@ -1,0 +1,38 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Dependências para Windows Server 2022 + NVIDIA GeForce RTX 4060
+# CUDA 12.4 | cuDNN 9.x | TensorRT 10.x
+#
+# Pré-requisitos (instalar ANTES deste requirements):
+#   1. NVIDIA Driver >= 551.x   → https://www.nvidia.com/drivers
+#   2. CUDA Toolkit 12.4        → https://developer.nvidia.com/cuda-toolkit-archive
+#   3. cuDNN 9.x para CUDA 12   → https://developer.nvidia.com/cudnn (requer conta NVIDIA)
+#   4. TensorRT 10.x            → https://developer.nvidia.com/tensorrt (requer conta NVIDIA)
+#      Após instalar, adicione os diretórios lib/ e bin/ do TensorRT ao PATH do sistema.
+#
+# Instalação:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+#   pip install -r requirements-windows-cuda.txt
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Visão computacional
+opencv-python>=4.9.0
+numpy>=1.26.0,<2.0
+
+# YOLO e inferência
+ultralytics>=8.3.0
+
+# OCR de placas
+easyocr>=1.7.1
+
+# Download de modelos HuggingFace
+huggingface_hub>=0.23.0
+
+# Backend API
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+pydantic>=2.7.0
+
+# Utilitários
+Pillow>=10.3.0
+matplotlib>=3.8.0
