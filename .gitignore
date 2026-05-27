@@ -1,0 +1,88 @@
+# ─── Sistema Operacional ──────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ─── IDEs e Editores ──────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── Agentes de IA ────────────────────────────────────────────────────────────
+.claude/
+AGENTS.md
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib64/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# ─── Ambientes Virtuais ───────────────────────────────────────────────────────
+venv/
+.venv/
+ENV/
+env/
+.env
+
+# ─── Node.js / Frontend ───────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.pnpm-store/
+frontend/dist/
+frontend/.vite/
+
+# ─── Banco de Dados ───────────────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ─── Modelos de ML (arquivos grandes) ────────────────────────────────────────
+*.pt
+*.pth
+*.onnx
+*.engine
+*.trt
+
+# ─── Snapshots e saídas de vídeo ─────────────────────────────────────────────
+snapshots/
+output_*.mp4
+output_*.avi
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
